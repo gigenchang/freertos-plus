@@ -75,14 +75,13 @@ const uint8_t * romfs_get_file_by_hash(const uint8_t * romfs, uint32_t h, uint32
 	* meta + 5 + m + 4: content(n bytes)
 	* meta + 5 + m + 4 + n: next file record
 	*/
-    const uint8_t * meta;
+    const uint8_t * meta = romfs;
 	uint8_t filename_len;
 	uint32_t hash, content_len;
 
 	while ((hash = get_unaligned(meta))) {
-		
-		filename_len = (uint8_t)*(meta + 4);
-		content_len = (uint32_t)get_unaligned(meta + 5 + filename_len);
+		filename_len = *(meta + 4);
+		content_len = get_unaligned(meta + 5 + filename_len);
 
 		if (hash == h) {
 			if (len) {
@@ -90,7 +89,7 @@ const uint8_t * romfs_get_file_by_hash(const uint8_t * romfs, uint32_t h, uint32
 			}	
 			return (meta + 5 + filename_len + 4);
 		} else {
-			meta = meta + 5 + filename_len + 4 + content_len;
+			meta += 5 + filename_len + 4 + content_len;
 		}
 	}
 
