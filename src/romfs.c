@@ -7,6 +7,7 @@
 #include "romfs.h"
 #include "osdebug.h"
 #include "hash-djb2.h"
+#include "clib.h"
 
 struct romfs_fds_t {
     const uint8_t * file;
@@ -66,16 +67,32 @@ static off_t romfs_seek(void * opaque, off_t offset, int whence) {
 }
 
 const uint8_t * romfs_get_file_by_hash(const uint8_t * romfs, uint32_t h, uint32_t * len) {
+   /* ptr: content of ptr 
+	* meta: hash
+	* meta + 4: filename_len(1 byte)
+	* meta + 5: filename(m bytes)
+	* meta + 5 + m: file_len(4 bytes)
+	* meta + 5 + m + 4: content(n bytes)
+	* meta + 5 + m + 4 + n: next file record
+	*/
     const uint8_t * meta;
+	uint8_t filename_len;
+	uint32_t hash, content_len;
 
-    for (meta = romfs; get_unaligned(meta) && get_unaligned(meta + 4); meta += get_unaligned(meta + 4) + 8) {
-        if (get_unaligned(meta) == h) {
-            if (len) {
-                *len = get_unaligned(meta + 4);
-            }
-            return meta + 8;
-        }
-    }
+	while ((hash = get_unaligned(meta))) {
+		
+		filename_len = (uint8_t)*(meta + 4);
+		content_len = (uint32_t)get_unaligned(meta + 5 + filename_len);
+
+		if (hash == h) {
+			if (len) {
+				*len = content_len;
+			}	
+			return (meta + 5 + filename_len + 4);
+		} else {
+			meta = meta + 5 + filename_len + 4 + content_len;
+		}
+	}
 
     return NULL;
 }
@@ -99,7 +116,46 @@ static int romfs_open(void * opaque, const char * path, int flags, int mode) {
     return r;
 }
 
+int romfs_show_files(void * opaque) {
+	uint8_t * meta = (uint8_t *) opaque;
+	uint8_t filename_len, buf[256];
+	
+
+	if (!meta) {
+		return -1;
+	}
+
+	memset(buf, 0, sizeof(buf));
+
+	fio_printf(1, "\r\n"); //why 1?
+		
+	while (get_unaligned(meta)) {
+		/* move to next field, the name of file name */
+		meta += 4;
+
+		/* get the length of file */
+		filename_len = *meta;
+
+		/* move to next field, filename*/
+		meta++;
+
+		memcpy(buf, meta, filename_len);
+		buf[filename_len] = '\0';
+
+		fio_printf(1, "%s ", buf);
+
+		/* move to next field, content of the file len */
+		meta += filename_len;
+
+		/* move to nextfield, next file meta*/
+		meta += 4 + get_unaligned(meta);		
+	}
+
+	fio_printf(1, "\r\n");
+	return 0;
+}
+
 void register_romfs(const char * mountpoint, const uint8_t * romfs) {
 //    DBGOUT("Registering romfs `%s' @ %p\r\n", mountpoint, romfs);
-    register_fs(mountpoint, romfs_open, (void *) romfs);
+    register_fs(mountpoint, romfs_open, romfs_show_files, (void *) romfs);
 }
