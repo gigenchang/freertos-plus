@@ -2,5 +2,9 @@ file build/main.elf
 target remote :3333
 
 b main
-
+c
+b command_prompt
+c
+set $argv = argv
+call test_command(1,$argv)
 c
